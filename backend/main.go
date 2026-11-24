@@ -24,6 +24,9 @@ func main() {
 	}
 	defer sqlDB.Close()
 
+	// TODO(1-8): Replace each nil below with its service (services.NewAuthService(), NewTaskService(),
+	//            NewUserService(), NewRegisterService()) as you implement them; the impls must satisfy the interfaces.
+	// TODO(2): Fail fast at startup if JWT_SECRET is empty.
 	authHandler := handlers.NewAuthHandler(db, nil)
 
 	taskHandler := handlers.NewTaskHandler(db, nil)
@@ -45,14 +48,18 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+	// TODO(9, optional): rate limiting middleware on /auth/login to slow brute-force attempts.
 	v1 := r.Group("/api/v1")
 	{
+		// Public: no token needed.
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/register", registrationHandler.Registration)
 			authRoutes.POST("/login", authHandler.Token)
 			authRoutes.POST("/refresh", refreshHandler.Refresh)
 		}
+		// TODO(6): Everything below must be protected: add middleware.AuthMiddleware() with .Use() on these groups
+		//          and middleware.RequirePermission("task", "read"|"write"|"delete") per route.
 		taskRoutes := v1.Group("/tasks")
 		{
 			taskRoutes.POST("", taskHandler.CreateTask)
@@ -61,6 +68,7 @@ func main() {
 			taskRoutes.GET("/:id", taskHandler.GetTaskByID)
 			taskRoutes.GET("", taskHandler.GetTasks)
 		}
+		// TODO(6): /users management (list, delete) is admin-only; own profile/tasks are allowed for the owner.
 		userRoutes := v1.Group("/users")
 		{
 			userRoutes.DELETE("/:user_id", userHandler.DeleteUser)

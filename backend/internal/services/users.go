@@ -22,6 +22,10 @@ func NewUserService() *UserServiceImpl {
 	return &UserServiceImpl{}
 }
 
+// GetUserProfileMalicious is the intentionally vulnerable starter code.
+// TODO(8): SQL INJECTION. userID is interpolated into the SQL string, so input like  ' OR '1'='1  returns every
+// user. Remove this method from the interface and implementation, and use GetUserProfile below
+// (it uses a bound parameter: db.Where("id = ?", userID)).
 func (s *UserServiceImpl) GetUserProfileMalicious(db *gorm.DB, userID string) ([]models.User, error) {
 	var user []models.User
 

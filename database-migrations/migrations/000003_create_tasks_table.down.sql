@@ -1,0 +1,1 @@
+-- TODO(7): DROP TABLE IF EXISTS tasks;

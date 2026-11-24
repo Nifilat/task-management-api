@@ -1,0 +1,4 @@
+-- TODO(4): Create the role_permissions join table.
+--   role_id       UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE
+--   permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE
+--   PRIMARY KEY (role_id, permission_id)

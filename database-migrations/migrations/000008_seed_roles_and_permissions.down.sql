@@ -1,0 +1,1 @@
+-- TODO(4): Delete the seeded rows (user_roles for the admin, role_permissions, permissions, roles).

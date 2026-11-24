@@ -1,0 +1,3 @@
+-- TODO(4): Create the roles table.
+--   id   UUID PRIMARY KEY
+--   name VARCHAR(50) NOT NULL UNIQUE      -- 'user' and 'admin' are inserted in 000008

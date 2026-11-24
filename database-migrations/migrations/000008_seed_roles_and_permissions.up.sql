@@ -1,0 +1,12 @@
+-- TODO(4): Populate the default data (rubric: roles, admin user with admin role, role-permission mappings).
+--   1. Insert roles: 'user' and 'admin' (fixed UUIDs make the later inserts easy to write).
+--   2. Insert permissions (resource:action), for example:
+--        task:read, task:write, task:delete, user:read, user:write, user:delete, profile:read, profile:write
+--   3. Map permissions to roles:
+--        user  -> profile:read, profile:write, task:read, task:write   (own data only; ABAC enforces "own")
+--        admin -> everything, including task:delete, user:read, user:write, user:delete
+--   4. Insert a user_roles row linking the seeded admin user
+--        (id bd006d41-aded-4040-9934-2ba4e909ef9a, created in 000001) to the 'admin' role.
+--
+-- NOTE: the starter's admin password hash in 000001 has an unknown plaintext. Either generate your own
+-- bcrypt hash and UPDATE the admin row here, or register a user and promote it. Never commit a real password.

@@ -3,14 +3,14 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
+	"task-manager/backend/internal/models"
 	"task-manager/backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
-
-var ErrDuplicateUsername = errors.New("username already exists")
 
 type RegisterHandler struct {
 	db              *gorm.DB
@@ -21,13 +21,38 @@ func NewRegisterHandler(db *gorm.DB, registerService services.RegisterService) *
 	return &RegisterHandler{db: db, registerService: registerService}
 }
 
+// RegisterInput is the request body for registration; it is separate from models.User so clients can't set ID or timestamps.
+type RegisterInput struct {
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+}
+
 // Registration handles POST /api/v1/auth/register.
-// TODO(1): Bind a request struct (username, email, password) with validation; 400 on invalid input.
-// Do not bind straight into models.User, so clients can't set ID, role or timestamps.
-// TODO(1): Hash the password with bcrypt (golang.org/x/crypto/bcrypt) in the service; never store plaintext.
-// TODO(1): Generate the user's UUID, save with GORM; return 409 for a duplicate username/email (ErrDuplicateUsername).
-// TODO(1): Never return the password hash in the response.
 // TODO(5): The service must also assign the default "user" role (insert into user_roles).
 func (h *RegisterHandler) Registration(c *gin.Context) {
+	var input RegisterInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username, valid email and password (min 6 characters) are required"})
+		return
+	}
+
+	username := strings.TrimSpace(input.Username)
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username cannot be blank"})
+		return
+	}
+
+	user := models.User{Username: username, Email: input.Email, Password: input.Password}
+	if err := h.registerService.RegisterUser(h.db, user); err != nil {
+		switch {
+		case errors.Is(err, services.ErrDuplicateUsername), errors.Is(err, services.ErrDuplicateEmail):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create user"})
+		}
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"message": "user created successfully"})
 }

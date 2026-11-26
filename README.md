@@ -83,17 +83,40 @@ Connect with psql: `psql -h localhost -p 5432 -U taskmanager -d taskmanager`
 | GET | `/api/v1/users` | admin |
 | DELETE | `/api/v1/users/:user_id` | admin |
 
+### Listing tasks: pagination and sorting
+
+`GET /api/v1/tasks` and `GET /api/v1/users/:user_id/tasks` accept these optional query parameters. The response body stays a plain array, and the total number of matching tasks is in the `X-Total-Count` header.
+
+| Param | Description | Default |
+|---|---|---|
+| `limit` | Tasks per page, 1 to 100 | 100 |
+| `offset` | Number of tasks to skip | 0 |
+| `sort_by` | `created_at`, `due_date`, `title` or `status` | `created_at` |
+| `order` | `asc` or `desc` | `asc` |
+
+Invalid values return `400`.
+
+### Rate limiting
+
+`POST /api/v1/auth/login` uses a token bucket per client IP: 5 attempts in a burst, then one more every 12 seconds. Over the limit the API answers `429` with a `Retry-After` header.
+
 ## Roadmap (TODO numbers match the code comments)
 
-1. [ ] **Registration**: validate input, bcrypt-hash the password, store in `users`
-2. [ ] **Login**: verify credentials, issue a JWT access_token and refresh_token (1 hour each), store the refresh_token in `tokens`
-3. [ ] **Refresh token** endpoint: validate against `tokens`, return a new access_token and refresh_token
-4. [ ] **RBAC/ABAC schema** (migrations 000004 to 000008): `roles`, `user_roles`, `permissions`, `role_permissions`, plus default data (roles `user` and `admin`, an admin user, role-permission mappings)
-5. [ ] **Wire roles and permissions** into registration (default `user` role) and login (roles and permissions in the token)
-6. [ ] **Auth middleware**: verify the access_token on each request, enforce role and permission checks
-7. [ ] **Tasks**: `tasks` migration (000003) and CRUD handlers and services
-8. [ ] **Fix the SQL injection** in the Get User Profile service (`GetUserProfileMalicious`) and finish the user endpoints
-9. [ ] Optional extras: Swagger, Postman collection, unit and end-to-end tests, pagination and sorting on tasks, README design notes, rate limiting on login
+1. [x] **Registration**: validate input, bcrypt-hash the password, store in `users`
+2. [x] **Login**: verify credentials, issue a JWT access_token and refresh_token (1 hour each), store the refresh_token in `tokens`
+3. [x] **Refresh token** endpoint: validate against `tokens`, return a new access_token and refresh_token
+4. [x] **RBAC/ABAC schema** (migrations 000004 to 000008): `roles`, `user_roles`, `permissions`, `role_permissions`, plus default data (roles `user` and `admin`, an admin user, role-permission mappings)
+5. [x] **Wire roles and permissions** into registration (default `user` role) and login (roles and permissions in the token)
+6. [x] **Auth middleware**: verify the access_token on each request, enforce role and permission checks
+7. [x] **Tasks**: `tasks` migration (000003) and CRUD handlers and services
+8. [x] **Fix the SQL injection** in the Get User Profile service (`GetUserProfileMalicious`) and finish the user endpoints
+9. Optional extras:
+   - [x] Pagination and sorting on tasks
+   - [x] Rate limiting on login
+   - [ ] Swagger
+   - [ ] Postman collection
+   - [ ] Unit and end-to-end tests
+   - [ ] README design notes
 
 ## Security notes to carry through
 

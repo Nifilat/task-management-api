@@ -2,6 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { TextField, Button, Grid, Container, Typography, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import api from '../services/api';
 import { useUser } from '../context/UserContext'; 
 
@@ -19,7 +20,7 @@ const LoginPage = () => {
         localStorage.setItem('access_token', response.data.access_token);
         
         const userResponse = await api.get('/users/profile');
-        login(userResponse.data.id); 
+        login(jwtDecode(response.data.access_token));
         localStorage.setItem('user', JSON.stringify(userResponse.data));
 
         navigate('/tasks');

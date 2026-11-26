@@ -7,9 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Task is a unit of work owned by one user. It must match the tasks table (migration 000003).
-// TODO(7): Confirm the fields against your migration; add Status validation (pending|in_progress|completed).
-// TODO(7): Use a request struct (title, description, due_date) for create/update so clients cannot set ID or UserID.
+// Task is a unit of work owned by one user. It matches the tasks table (migration 000003).
 type Task struct {
 	gorm.Model
 	ID          uuid.UUID  `json:"id" gorm:"primaryKey"`
@@ -18,4 +16,12 @@ type Task struct {
 	Description string     `json:"description"`
 	DueDate     *time.Time `json:"due_date"`
 	Status      string     `json:"status"`
+}
+
+// TaskInput is the request body for creating and updating a task, so clients cannot set ID or UserID.
+type TaskInput struct {
+	Title       string     `json:"title" binding:"required"`
+	Description string     `json:"description"`
+	DueDate     *time.Time `json:"due_date"`
+	Status      string     `json:"status" binding:"omitempty,oneof=pending in_progress completed"`
 }

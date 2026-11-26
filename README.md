@@ -2,7 +2,7 @@
 
 Backend for Railtronics' task management platform, written in Go (Gin + GORM) on PostgreSQL. Users register and log in, manage their own tasks and profile; admins manage all users and tasks. Access is controlled with JWT access tokens, role-based access control (RBAC) and permission-level attribute checks (ABAC).
 
-> Status: **skeleton**. Search for the TODOs to find what to build next: `grep -rn "TODO(" backend database-migrations`
+> Status: the required features are implemented; see the roadmap below.
 
 ## Project layout
 
@@ -55,8 +55,6 @@ Run the migrations with [golang-migrate](https://github.com/golang-migrate/migra
 migrate -path database-migrations/migrations \
   -database "postgres://taskmanager:$DB_PASSWORD@localhost:5432/taskmanager?sslmode=disable" -verbose up
 ```
-
-> The new migrations (000003 to 000008) start as TODO comments. Fill them in **before** the first `up`; if you already ran them, `migrate ... down 6` then `up` after editing.
 
 Run the API:
 

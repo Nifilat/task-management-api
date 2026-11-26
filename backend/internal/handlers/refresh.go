@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"task-manager/backend/internal/services"
+	"task-manager/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,14 +25,28 @@ func NewRefreshHandler(db *gorm.DB, authService services.AuthService) *RefreshHa
 }
 
 // Refresh handles POST /api/v1/auth/refresh.
-// TODO(3): Bind RefreshRequest; find the refresh_token in the tokens table; 401 if unknown or expired.
-// TODO(3): Issue a new access_token AND a new refresh_token, with expiries (rubric).
-// TODO(3): Rotate: delete or invalidate the used refresh_token so it can't be replayed.
 // TODO(5): Re-load the user's current roles/permissions into the new access_token.
 func (h *RefreshHandler) Refresh(c *gin.Context) {
+	var req RefreshRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	accessToken, refreshToken, err := h.authService.RotateRefreshToken(h.db, req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, services.ErrInvalidRefreshToken) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not refresh token"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"access_token":  "accessToken",
-		"refresh_token": "refreshToken",
-		"expires_in":    3600,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"expires_in":    int(utils.AccessTokenTTL.Seconds()),
 	})
 }

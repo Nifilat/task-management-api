@@ -2,9 +2,17 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+const (
+	TokenIssuer    = "task-manager"
+	AccessTokenTTL = time.Hour
 )
 
 func GetEnv(key, defaultValue string) string {
@@ -49,25 +57,51 @@ type PermissionClaim struct {
 }
 
 // Claims is the JWT payload. The frontend decodes user_id, roles, is_admin and permissions from it.
-// TODO(5): Embed jwt.RegisteredClaims (from github.com/golang-jwt/jwt/v5) for exp, iss, sub.
 type Claims struct {
 	UserID      string            `json:"user_id"`
 	Roles       []string          `json:"roles"`
 	IsAdmin     bool              `json:"is_admin"`
 	Permissions []PermissionClaim `json:"permissions"`
+	jwt.RegisteredClaims
 }
 
-// GenerateJWT signs an access_token for the user (valid 1 hour, rubric).
-// TODO(2): Build the claims, sign with HS256 using the JWT_SECRET env var, return the token string.
+// GenerateJWT signs an access_token for the user (valid 1 hour, rubric) with HS256 and JWT_SECRET.
 // TODO(5): Include the user's roles and permissions in the claims.
 func GenerateJWT(claims Claims) (string, error) {
-	return "", errors.New("not implemented")
+	secret := GetEnv("JWT_SECRET", "")
+	if secret == "" {
+		return "", errors.New("JWT_SECRET is not set")
+	}
+
+	now := time.Now()
+	claims.RegisteredClaims = jwt.RegisteredClaims{
+		Issuer:    TokenIssuer,
+		Subject:   claims.UserID,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
+	}
+
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
 
-// ParseJWT validates a token's signature and expiry and returns its claims.
-// TODO(6): Verify the signing method is HS256 (reject "none"), the issuer, and expiry; return the claims.
+// ParseJWT validates a token's signature, signing method, issuer and expiry and returns its claims.
 func ParseJWT(tokenString string) (*Claims, error) {
-	return nil, errors.New("not implemented")
+	secret := GetEnv("JWT_SECRET", "")
+	if secret == "" {
+		return nil, errors.New("JWT_SECRET is not set")
+	}
+
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(TokenIssuer), jwt.WithExpirationRequired())
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	return claims, nil
 }
 
 // IsValidUUID reports whether s is a well-formed UUID (use before touching the database).

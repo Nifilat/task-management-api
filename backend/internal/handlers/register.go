@@ -7,6 +7,7 @@ import (
 
 	"task-manager/backend/internal/models"
 	"task-manager/backend/internal/services"
+	"task-manager/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -25,20 +26,25 @@ func NewRegisterHandler(db *gorm.DB, registerService services.RegisterService) *
 type RegisterInput struct {
 	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
+	Password string `json:"password" binding:"required"`
 }
 
 // Registration handles POST /api/v1/auth/register.
 func (h *RegisterHandler) Registration(c *gin.Context) {
 	var input RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username, valid email and password (min 6 characters) are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username, valid email and password are required"})
 		return
 	}
 
 	username := strings.TrimSpace(input.Username)
 	if username == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username cannot be blank"})
+		return
+	}
+
+	if err := utils.ValidatePassword(input.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

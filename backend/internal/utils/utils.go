@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"unicode"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -101,4 +102,39 @@ func ParseJWT(tokenString string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token")
 	}
 	return claims, nil
+}
+
+const MinPasswordLength = 8
+
+// ValidatePassword returns an error naming the first password rule that is not met.
+func ValidatePassword(password string) error {
+	if len(password) < MinPasswordLength {
+		return fmt.Errorf("password must be at least %d characters long", MinPasswordLength)
+	}
+
+	var upper, lower, digit, special bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			upper = true
+		case unicode.IsLower(r):
+			lower = true
+		case unicode.IsDigit(r):
+			digit = true
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			special = true
+		}
+	}
+
+	switch {
+	case !upper:
+		return errors.New("password must contain at least one uppercase letter")
+	case !lower:
+		return errors.New("password must contain at least one lowercase letter")
+	case !digit:
+		return errors.New("password must contain at least one number")
+	case !special:
+		return errors.New("password must contain at least one special character")
+	}
+	return nil
 }

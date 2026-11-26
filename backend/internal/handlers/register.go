@@ -29,7 +29,6 @@ type RegisterInput struct {
 }
 
 // Registration handles POST /api/v1/auth/register.
-// TODO(5): The service must also assign the default "user" role (insert into user_roles).
 func (h *RegisterHandler) Registration(c *gin.Context) {
 	var input RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -44,6 +43,7 @@ func (h *RegisterHandler) Registration(c *gin.Context) {
 	}
 
 	user := models.User{Username: username, Email: input.Email, Password: input.Password}
+
 	if err := h.registerService.RegisterUser(h.db, user); err != nil {
 		switch {
 		case errors.Is(err, services.ErrDuplicateUsername), errors.Is(err, services.ErrDuplicateEmail):
@@ -54,5 +54,5 @@ func (h *RegisterHandler) Registration(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "user created successfully"})
+	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully"})
 }

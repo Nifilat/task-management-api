@@ -2,7 +2,6 @@ package services
 
 import (
 	"errors"
-	"strings"
 
 	"task-manager/backend/internal/models"
 
@@ -16,7 +15,8 @@ var (
 	ErrDuplicateEmail    = errors.New("email already exists")
 )
 
-// TODO(5): In the same transaction, assign the default "user" role.
+const DefaultRole = "user"
+
 type RegisterService interface {
 	RegisterUser(db *gorm.DB, user models.User) error
 }
@@ -28,31 +28,39 @@ func NewRegisterService() *RegisterServiceImpl {
 }
 
 func (s *RegisterServiceImpl) RegisterUser(db *gorm.DB, user models.User) error {
-	var count int64
-	if err := db.Model(&models.User{}).Where("username = ?", user.Username).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return ErrDuplicateUsername
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	user.Password = string(hash)
-
-	id, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-	user.ID = id
-
-	if err := db.Create(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "SQLSTATE 23505") {
-			return ErrDuplicateEmail
+	return db.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&models.User{}).Where("username = ?", user.Username).Count(&count).Error; err != nil {
+			return err
 		}
-		return err
-	}
-	return nil
+		if count > 0 {
+			return ErrDuplicateUsername
+		}
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		user.Password = string(hash)
+
+		id, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+		user.ID = id
+
+		var role models.Role
+		if err := tx.Where("name = ?", DefaultRole).First(&role).Error; err != nil {
+			return err
+		}
+		user.Roles = []models.Role{role}
+
+		if err := tx.Omit("Roles.*").Create(&user).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				return ErrDuplicateEmail
+			}
+			return err
+		}
+		return nil
+	})
 }

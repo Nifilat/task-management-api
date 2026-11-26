@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"task-manager/backend/internal/utils"
 
@@ -30,20 +31,77 @@ func AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RequirePermission allows the request only if the token carries the given permission (RBAC + resource-level ABAC).
-// TODO(6): Read claims from the context; respond 403 if the permission resource:action is missing.
-// TODO(6): Ownership rule (ABAC): a "user" may only touch their own profile/tasks (claims.user_id == owner);
-// an admin may act on anyone's. Decide where this check lives (middleware vs handler/service).
+// getClaims returns the claims stored by AuthMiddleware; it replies 401 and returns false when they are missing.
+func getClaims(c *gin.Context) (*utils.Claims, bool) {
+	value, exists := c.Get("claims")
+	claims, ok := value.(*utils.Claims)
+	if !exists || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		c.Abort()
+		return nil, false
+	}
+	return claims, true
+}
+
+// RequirePermission allows the request only if the token carries the given permission (RBAC).
 func RequirePermission(resource, action string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Next() // pass-through until implemented
+		claims, ok := getClaims(c)
+		if !ok {
+			return
+		}
+
+		for _, p := range claims.Permissions {
+			if p.Resource == resource && slices.Contains(p.Actions, action) {
+				c.Next()
+				return
+			}
+		}
+
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":    "Insufficient permissions",
+			"required": resource + ":" + action,
+		})
+		c.Abort()
 	}
 }
 
-// RequireRole allows the request only for the given role, e.g. RequireRole("admin") for /users management.
-// TODO(6): Respond 403 when the role is not in the token's roles claim.
+// RequireRole allows the request only for the given role, e.g. RequireRole("admin").
 func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Next() // pass-through until implemented
+		claims, ok := getClaims(c)
+		if !ok {
+			return
+		}
+
+		if !slices.Contains(claims.Roles, role) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":     "Insufficient permissions",
+				"your_role": claims.Roles,
+				"required":  role,
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RequireOwnerOrAdmin is the ownership check (ABAC): the user id in the URL must be the caller's own, unless the caller is an admin.
+func RequireOwnerOrAdmin(param string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, ok := getClaims(c)
+		if !ok {
+			return
+		}
+
+		if claims.IsAdmin || strings.EqualFold(claims.UserID, c.Param(param)) {
+			c.Next()
+			return
+		}
+
+		c.JSON(http.StatusForbidden, gin.H{"error": "You can only access your own data"})
+		c.Abort()
 	}
 }

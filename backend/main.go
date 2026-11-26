@@ -62,25 +62,23 @@ func main() {
 			authRoutes.POST("/login", authHandler.Token)
 			authRoutes.POST("/refresh", refreshHandler.Refresh)
 		}
-		// TODO(6): Add middleware.RequirePermission("task", "read"|"write"|"delete") per route.
 		taskRoutes := v1.Group("/tasks")
 		taskRoutes.Use(middleware.AuthMiddleware())
 		{
-			taskRoutes.POST("", taskHandler.CreateTask)
-			taskRoutes.PUT("/:id", taskHandler.UpdateTask)
-			taskRoutes.DELETE("/:id", taskHandler.DeleteTask)
-			taskRoutes.GET("/:id", taskHandler.GetTaskByID)
-			taskRoutes.GET("", taskHandler.GetTasks)
+			taskRoutes.POST("", middleware.RequirePermission(utils.ResourceTask, utils.ActionWrite), taskHandler.CreateTask)
+			taskRoutes.PUT("/:id", middleware.RequirePermission(utils.ResourceTask, utils.ActionWrite), taskHandler.UpdateTask)
+			taskRoutes.DELETE("/:id", middleware.RequirePermission(utils.ResourceTask, utils.ActionDelete), taskHandler.DeleteTask)
+			taskRoutes.GET("/:id", middleware.RequirePermission(utils.ResourceTask, utils.ActionRead), taskHandler.GetTaskByID)
+			taskRoutes.GET("", middleware.RequirePermission(utils.ResourceTask, utils.ActionRead), taskHandler.GetTasks)
 		}
-		// TODO(6): /users management (list, delete) is admin-only; own profile/tasks are allowed for the owner.
 		userRoutes := v1.Group("/users")
 		userRoutes.Use(middleware.AuthMiddleware())
 		{
-			userRoutes.DELETE("/:user_id", userHandler.DeleteUser)
-			userRoutes.GET("", userHandler.GetUsers)
-			userRoutes.GET("/:user_id/tasks", taskHandler.GetTasksByUser)
-			userRoutes.GET("/profile", userHandler.GetUserProfile)
-			userRoutes.GET("/profile/:user_id", userHandler.GetUserProfileByUserId)
+			userRoutes.DELETE("/:user_id", middleware.RequirePermission(utils.ResourceUser, utils.ActionDelete), userHandler.DeleteUser)
+			userRoutes.GET("", middleware.RequirePermission(utils.ResourceUser, utils.ActionRead), userHandler.GetUsers)
+			userRoutes.GET("/:user_id/tasks", middleware.RequirePermission(utils.ResourceTask, utils.ActionRead), middleware.RequireOwnerOrAdmin("user_id"), taskHandler.GetTasksByUser)
+			userRoutes.GET("/profile", middleware.RequirePermission(utils.ResourceProfile, utils.ActionRead), userHandler.GetUserProfile)
+			userRoutes.GET("/profile/:user_id", middleware.RequirePermission(utils.ResourceProfile, utils.ActionRead), middleware.RequireOwnerOrAdmin("user_id"), userHandler.GetUserProfileByUserId)
 		}
 	}
 	r.Run(":8080")

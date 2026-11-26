@@ -4,9 +4,12 @@ import (
 	"errors"
 	"net/http"
 
+	"task-manager/backend/internal/models"
 	"task-manager/backend/internal/services"
+	"task-manager/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 )
 
@@ -19,49 +22,170 @@ func NewTaskHandler(db *gorm.DB, taskService services.TaskService) *TaskHandler 
 	return &TaskHandler{db: db, taskService: taskService}
 }
 
-// CreateTask handles POST /api/v1/tasks.
-// TODO(7): Bind title, description, due_date; 400 on invalid input. Owner = the user_id from the token claims.
-// TODO(7): Generate the UUID, save with GORM, return 201 + the created task.
+// callerFromContext returns the token claims and the caller's user id set by AuthMiddleware.
+func callerFromContext(c *gin.Context) (*utils.Claims, uuid.UUID, bool) {
+	value, exists := c.Get("claims")
+	claims, ok := value.(*utils.Claims)
+	if !exists || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+		return nil, uuid.Nil, false
+	}
+
+	userID, err := uuid.FromString(claims.UserID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return nil, uuid.Nil, false
+	}
+	return claims, userID, true
+}
+
+// loadTask finds the task in :id and checks the caller may access it: the owner, or an admin (ABAC).
+func (h *TaskHandler) loadTask(c *gin.Context) (models.Task, bool) {
+	taskID, err := uuid.FromString(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return models.Task{}, false
+	}
+
+	claims, userID, ok := callerFromContext(c)
+	if !ok {
+		return models.Task{}, false
+	}
+
+	task, err := h.taskService.GetTaskByID(h.db, taskID)
+	if err != nil {
+		handleTaskError(c, err)
+		return models.Task{}, false
+	}
+
+	if !claims.IsAdmin && task.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "you can only access your own tasks"})
+		return models.Task{}, false
+	}
+	return task, true
+}
+
+// CreateTask handles POST /api/v1/tasks. The owner is the user in the token, never the request body.
 func (h *TaskHandler) CreateTask(c *gin.Context) {
+	var input models.TaskInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required; status must be pending, in_progress or completed"})
+		return
+	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "task created successfully"})
+	_, userID, ok := callerFromContext(c)
+	if !ok {
+		return
+	}
+
+	task := models.Task{
+		UserID:      userID,
+		Title:       input.Title,
+		Description: input.Description,
+		DueDate:     input.DueDate,
+		Status:      input.Status,
+	}
+	if task.Status == "" {
+		task.Status = "pending"
+	}
+
+	created, err := h.taskService.CreateTask(h.db, task)
+	if err != nil {
+		handleTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, created)
 }
 
-// UpdateTask handles PUT /api/v1/tasks/:id.
-// TODO(7): Validate the :id UUID (utils.IsValidUUID); 404 if the task doesn't exist.
-// TODO(7): ABAC: a user may update only their own task; an admin may update any (403 otherwise).
+// UpdateTask handles PUT /api/v1/tasks/:id (owner or admin).
 func (h *TaskHandler) UpdateTask(c *gin.Context) {
+	task, ok := h.loadTask(c)
+	if !ok {
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "task updated successfully"})
+	var input models.TaskInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required; status must be pending, in_progress or completed"})
+		return
+	}
+
+	task.Title = input.Title
+	task.Description = input.Description
+	task.DueDate = input.DueDate
+	if input.Status != "" {
+		task.Status = input.Status
+	}
+
+	updated, err := h.taskService.UpdateTask(h.db, task)
+	if err != nil {
+		handleTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, updated)
 }
 
-// DeleteTask handles DELETE /api/v1/tasks/:id.
-// TODO(7): 404 if missing. Permissions table: only admins can delete tasks (task:delete).
+// DeleteTask handles DELETE /api/v1/tasks/:id. The route requires task:delete, which only admins have.
 func (h *TaskHandler) DeleteTask(c *gin.Context) {
+	taskID, err := uuid.FromString(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
 
-	c.JSON(http.StatusNoContent, nil)
+	if err := h.taskService.DeleteTask(h.db, taskID); err != nil {
+		handleTaskError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
-// GetTaskByID handles GET /api/v1/tasks/:id.
-// TODO(7): 404 if missing. ABAC: users see only their own task, admins any.
+// GetTaskByID handles GET /api/v1/tasks/:id (owner or admin).
 func (h *TaskHandler) GetTaskByID(c *gin.Context) {
-
-	c.JSON(http.StatusOK, "task by id")
+	task, ok := h.loadTask(c)
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, task)
 }
 
 // GetTasksByUser handles GET /api/v1/users/:user_id/tasks (the frontend's task list calls this).
-// TODO(7): A user may list only their own tasks (:user_id must equal the token's user_id); admins any user's.
+// The route's RequireOwnerOrAdmin middleware already ensures the caller is that user or an admin.
 func (h *TaskHandler) GetTasksByUser(c *gin.Context) {
+	userID, err := uuid.FromString(c.Param("user_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
 
-	c.JSON(http.StatusOK, "tasks list by user")
+	tasks, err := h.taskService.GetTasksByUser(h.db, userID)
+	if err != nil {
+		handleTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tasks)
 }
 
-// GetTasks handles GET /api/v1/tasks.
-// TODO(7): Admins get every task; a regular user gets only their own.
+// GetTasks handles GET /api/v1/tasks: admins get every task, a regular user gets only their own.
 // TODO(9, optional): pagination (limit/offset) and sorting, with a whitelisted sort field.
 func (h *TaskHandler) GetTasks(c *gin.Context) {
+	claims, userID, ok := callerFromContext(c)
+	if !ok {
+		return
+	}
 
-	c.JSON(http.StatusOK, "tasks list")
+	var tasks []models.Task
+	var err error
+	if claims.IsAdmin {
+		tasks, err = h.taskService.GetTasks(h.db)
+	} else {
+		tasks, err = h.taskService.GetTasksByUser(h.db, userID)
+	}
+	if err != nil {
+		handleTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tasks)
 }
 
 func handleTaskError(c *gin.Context, err error) {

@@ -31,10 +31,9 @@ func main() {
 		log.Fatal("JWT_SECRET is not set")
 	}
 
-	// TODO(7-8): Replace the remaining nil services (NewTaskService()) as you implement them.
 	authHandler := handlers.NewAuthHandler(db, services.NewAuthService())
 
-	taskHandler := handlers.NewTaskHandler(db, nil)
+	taskHandler := handlers.NewTaskHandler(db, services.NewTaskService())
 
 	refreshHandler := handlers.NewRefreshHandler(db, services.NewAuthService())
 

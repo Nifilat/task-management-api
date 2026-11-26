@@ -12,12 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
+const AdminRole = "admin"
+
 var (
 	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 )
 
-// TODO(5): Add a method that loads a user's roles and permissions for the token claims.
 type AuthService interface {
 	LoginUser(db *gorm.DB, username, password string) (*models.User, error)
 	GenerateToken(db *gorm.DB, userID uuid.UUID) (string, string, error)
@@ -53,7 +54,12 @@ func (s *AuthServiceImpl) LoginUser(db *gorm.DB, username, password string) (*mo
 
 // GenerateToken returns a new access_token (JWT) and refresh_token, and stores the refresh_token in the tokens table.
 func (s *AuthServiceImpl) GenerateToken(db *gorm.DB, userID uuid.UUID) (string, string, error) {
-	accessToken, err := utils.GenerateJWT(utils.Claims{UserID: userID.String()})
+	claims, err := loadClaims(db, userID)
+	if err != nil {
+		return "", "", err
+	}
+
+	accessToken, err := utils.GenerateJWT(claims)
 	if err != nil {
 		return "", "", err
 	}
@@ -111,4 +117,38 @@ func (s *AuthServiceImpl) RotateRefreshToken(db *gorm.DB, refreshToken string) (
 		return "", "", err
 	}
 	return access, refresh, nil
+}
+
+// loadClaims reads the user's current roles and permissions so the token always reflects the database.
+func loadClaims(db *gorm.DB, userID uuid.UUID) (utils.Claims, error) {
+	var user models.User
+	if err := db.Preload("Roles.Permissions").First(&user, "id = ?", userID).Error; err != nil {
+		return utils.Claims{}, err
+	}
+
+	claims := utils.Claims{UserID: userID.String(), Roles: []string{}, Permissions: []utils.PermissionClaim{}}
+	actionsByResource := map[string]map[string]bool{}
+
+	for _, role := range user.Roles {
+		claims.Roles = append(claims.Roles, role.Name)
+		if role.Name == AdminRole {
+			claims.IsAdmin = true
+		}
+		for _, p := range role.Permissions {
+			if actionsByResource[p.Resource] == nil {
+				actionsByResource[p.Resource] = map[string]bool{}
+			}
+			actionsByResource[p.Resource][p.Action] = true
+		}
+	}
+
+	for resource, actions := range actionsByResource {
+		permission := utils.PermissionClaim{Resource: resource, Actions: []string{}}
+		for action := range actions {
+			permission.Actions = append(permission.Actions, action)
+		}
+		claims.Permissions = append(claims.Permissions, permission)
+	}
+
+	return claims, nil
 }

@@ -66,7 +66,6 @@ type Claims struct {
 }
 
 // GenerateJWT signs an access_token for the user (valid 1 hour, rubric) with HS256 and JWT_SECRET.
-// TODO(5): Include the user's roles and permissions in the claims.
 func GenerateJWT(claims Claims) (string, error) {
 	secret := GetEnv("JWT_SECRET", "")
 	if secret == "" {

@@ -26,7 +26,6 @@ func NewAuthHandler(db *gorm.DB, authService services.AuthService) *AuthHandler 
 }
 
 // Token handles POST /api/v1/auth/login.
-// TODO(5): Load the user's roles and permissions and embed them in the access_token claims (utils.Claims).
 func (h *AuthHandler) Token(c *gin.Context) {
 	var req AuthRequest
 

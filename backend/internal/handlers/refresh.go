@@ -25,7 +25,6 @@ func NewRefreshHandler(db *gorm.DB, authService services.AuthService) *RefreshHa
 }
 
 // Refresh handles POST /api/v1/auth/refresh.
-// TODO(5): Re-load the user's current roles/permissions into the new access_token.
 func (h *RefreshHandler) Refresh(c *gin.Context) {
 	var req RefreshRequest
 

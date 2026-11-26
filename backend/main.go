@@ -42,23 +42,27 @@ func main() {
 	registrationHandler := handlers.NewRegisterHandler(db, services.NewRegisterService())
 
 	r := gin.Default()
+	// Don't trust X-Forwarded-For: the rate limiter keys on the real connection address.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatal("Failed to set trusted proxies: ", err)
+	}
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://host.docker.internal"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "Retry-After", "X-Total-Count"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-	// TODO(9, optional): rate limiting middleware on /auth/login to slow brute-force attempts.
 	v1 := r.Group("/api/v1")
 	{
 		// Public: no token needed.
 		authRoutes := v1.Group("/auth")
 		{
 			authRoutes.POST("/register", registrationHandler.Registration)
-			authRoutes.POST("/login", authHandler.Token)
+			// 5 attempts, then one more every 12 seconds, per client IP.
+			authRoutes.POST("/login", middleware.RateLimit(5, 12*time.Second), authHandler.Token)
 			authRoutes.POST("/refresh", refreshHandler.Refresh)
 		}
 		taskRoutes := v1.Group("/tasks")

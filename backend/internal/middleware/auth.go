@@ -1,15 +1,32 @@
 package middleware
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+	"strings"
+	"task-manager/backend/internal/utils"
+
+	"github.com/gin-gonic/gin"
+)
 
 // AuthMiddleware verifies the access_token on each request and stores its claims on the context.
-// TODO(6): Read the "Authorization: Bearer <token>" header; respond 401 if missing or malformed.
-// TODO(6): Validate the signature, issuer and expiry with utils.ParseJWT; respond 401 if invalid or expired.
-// TODO(6): c.Set("claims", claims) (user_id, roles, permissions) for handlers and later middleware, then c.Next().
-// TODO(6): Wire it in main.go with .Use() on the protected route groups (not on /auth/register, /login, /refresh).
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Next() // pass-through until implemented: every route is OPEN
+		header := c.GetHeader("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid token"})
+			c.Abort()
+			return
+		}
+
+		claims, err := utils.ParseJWT(strings.TrimPrefix(header, "Bearer "))
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.Abort()
+			return
+		}
+
+		c.Set("claims", claims)
+		c.Next()
 	}
 }
 

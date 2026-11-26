@@ -3,8 +3,10 @@ package handlers
 import (
 	"net/http"
 	"task-manager/backend/internal/services"
+	"task-manager/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 )
 
@@ -22,7 +24,29 @@ func NewUserHandler(db *gorm.DB, userService services.UserService) *UserHandler 
 // Use the parameterized GetUserProfile instead, and delete the Malicious method (rubric: SQL injection fix).
 // TODO(8): Take the user id from the token claims, not from the request. Never return the password hash.
 func (h *UserHandler) GetUserProfile(c *gin.Context) {
-	c.JSON(http.StatusOK, "user profile")
+	value, exists := c.Get("claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+		return
+	}
+
+	userID, err := uuid.FromString(value.(*utils.Claims).UserID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	user, err := h.userService.GetUserProfile(h.db, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not load profile"})
+		return
+	}
+	if user.ID == uuid.Nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
 }
 
 // GetUserProfileByUserId handles GET /api/v1/users/profile/:user_id.

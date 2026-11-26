@@ -3,8 +3,10 @@ package main
 import (
 	"log"
 	"task-manager/backend/internal/handlers"
+	"task-manager/backend/internal/middleware"
 	"task-manager/backend/internal/repositories"
 	"task-manager/backend/internal/services"
+	"task-manager/backend/internal/utils"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -25,16 +27,18 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	// TODO(1-8): Replace each nil below with its service (services.NewAuthService(), NewTaskService(),
-	//            NewUserService(), NewRegisterService()) as you implement them; the impls must satisfy the interfaces.
-	// TODO(2): Fail fast at startup if JWT_SECRET is empty.
-	authHandler := handlers.NewAuthHandler(db, nil)
+	if utils.GetEnv("JWT_SECRET", "") == "" {
+		log.Fatal("JWT_SECRET is not set")
+	}
+
+	// TODO(7-8): Replace the remaining nil services (NewTaskService()) as you implement them.
+	authHandler := handlers.NewAuthHandler(db, services.NewAuthService())
 
 	taskHandler := handlers.NewTaskHandler(db, nil)
 
-	refreshHandler := handlers.NewRefreshHandler(db, nil)
+	refreshHandler := handlers.NewRefreshHandler(db, services.NewAuthService())
 
-	userHandler := handlers.NewUserHandler(db, nil)
+	userHandler := handlers.NewUserHandler(db, services.NewUserService())
 
 	registrationHandler := handlers.NewRegisterHandler(db, services.NewRegisterService())
 
@@ -58,9 +62,9 @@ func main() {
 			authRoutes.POST("/login", authHandler.Token)
 			authRoutes.POST("/refresh", refreshHandler.Refresh)
 		}
-		// TODO(6): Everything below must be protected: add middleware.AuthMiddleware() with .Use() on these groups
-		//          and middleware.RequirePermission("task", "read"|"write"|"delete") per route.
+		// TODO(6): Add middleware.RequirePermission("task", "read"|"write"|"delete") per route.
 		taskRoutes := v1.Group("/tasks")
+		taskRoutes.Use(middleware.AuthMiddleware())
 		{
 			taskRoutes.POST("", taskHandler.CreateTask)
 			taskRoutes.PUT("/:id", taskHandler.UpdateTask)
@@ -70,6 +74,7 @@ func main() {
 		}
 		// TODO(6): /users management (list, delete) is admin-only; own profile/tasks are allowed for the owner.
 		userRoutes := v1.Group("/users")
+		userRoutes.Use(middleware.AuthMiddleware())
 		{
 			userRoutes.DELETE("/:user_id", userHandler.DeleteUser)
 			userRoutes.GET("", userHandler.GetUsers)

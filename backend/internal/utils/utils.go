@@ -14,6 +14,8 @@ import (
 const (
 	TokenIssuer    = "task-manager"
 	AccessTokenTTL = time.Hour
+
+	RefreshTokenTTL = time.Hour
 )
 
 func GetEnv(key, defaultValue string) string {
@@ -99,6 +101,47 @@ func ParseJWT(tokenString string) (*Claims, error) {
 		return nil, err
 	}
 	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	return claims, nil
+}
+
+// GenerateRefreshJWT signs a refresh_token (valid 1 hour) whose jti is the id of its row in the tokens table.
+func GenerateRefreshJWT(userID, tokenID string) (string, time.Time, error) {
+	secret := GetEnv("JWT_SECRET", "")
+	if secret == "" {
+		return "", time.Time{}, errors.New("JWT_SECRET is not set")
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(RefreshTokenTTL)
+	claims := jwt.RegisteredClaims{
+		Issuer:    TokenIssuer,
+		Subject:   userID,
+		ID:        tokenID,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(expiresAt),
+	}
+
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+	return signed, expiresAt, err
+}
+
+// ParseRefreshJWT validates a refresh_token's signature, issuer and expiry.
+func ParseRefreshJWT(tokenString string) (*jwt.RegisteredClaims, error) {
+	secret := GetEnv("JWT_SECRET", "")
+	if secret == "" {
+		return nil, errors.New("JWT_SECRET is not set")
+	}
+
+	claims := &jwt.RegisteredClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(TokenIssuer), jwt.WithExpirationRequired())
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid || claims.ID == "" {
 		return nil, fmt.Errorf("invalid token")
 	}
 	return claims, nil

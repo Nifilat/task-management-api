@@ -68,7 +68,7 @@ func (s *AuthServiceImpl) GenerateToken(db *gorm.DB, userID uuid.UUID) (string, 
 	if err != nil {
 		return "", "", err
 	}
-	refreshToken, err := uuid.NewV4()
+	refreshToken, expiresAt, err := utils.GenerateRefreshJWT(userID.String(), tokenID.String())
 	if err != nil {
 		return "", "", err
 	}
@@ -77,26 +77,25 @@ func (s *AuthServiceImpl) GenerateToken(db *gorm.DB, userID uuid.UUID) (string, 
 		ID:           tokenID,
 		UserId:       userID,
 		RefreshToken: refreshToken,
-		ExpiresAt:    time.Now().Add(utils.AccessTokenTTL),
+		ExpiresAt:    expiresAt,
 	}
 	if err := db.Create(&token).Error; err != nil {
 		return "", "", err
 	}
 
-	return accessToken, refreshToken.String(), nil
+	return accessToken, refreshToken, nil
 }
 
 // RotateRefreshToken exchanges a valid refresh_token for a new access/refresh pair; the old one is deleted so it can't be reused.
 func (s *AuthServiceImpl) RotateRefreshToken(db *gorm.DB, refreshToken string) (string, string, error) {
-	refreshID, err := uuid.FromString(refreshToken)
-	if err != nil {
+	if _, err := utils.ParseRefreshJWT(refreshToken); err != nil {
 		return "", "", ErrInvalidRefreshToken
 	}
 
 	var access, refresh string
-	err = db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var stored models.Token
-		if err := tx.Where("refresh_token = ?", refreshID).First(&stored).Error; err != nil {
+		if err := tx.Where("refresh_token = ?", refreshToken).First(&stored).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrInvalidRefreshToken
 			}
@@ -110,8 +109,9 @@ func (s *AuthServiceImpl) RotateRefreshToken(db *gorm.DB, refreshToken string) (
 			return ErrInvalidRefreshToken
 		}
 
-		access, refresh, err = s.GenerateToken(tx, stored.UserId)
-		return err
+		var genErr error
+		access, refresh, genErr = s.GenerateToken(tx, stored.UserId)
+		return genErr
 	})
 	if err != nil {
 		return "", "", err

@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"task-manager/backend/internal/models"
 	"task-manager/backend/internal/services"
@@ -158,34 +160,89 @@ func (h *TaskHandler) GetTasksByUser(c *gin.Context) {
 		return
 	}
 
-	tasks, err := h.taskService.GetTasksByUser(h.db, userID)
+	opts, ok := parseTaskListOptions(c)
+	if !ok {
+		return
+	}
+
+	tasks, total, err := h.taskService.GetTasksByUser(h.db, userID, opts)
 	if err != nil {
 		handleTaskError(c, err)
 		return
 	}
+	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
 	c.JSON(http.StatusOK, tasks)
 }
 
 // GetTasks handles GET /api/v1/tasks: admins get every task, a regular user gets only their own.
-// TODO(9, optional): pagination (limit/offset) and sorting, with a whitelisted sort field.
+// Query params (all optional): limit (1-100, default 100), offset, sort_by, order.
 func (h *TaskHandler) GetTasks(c *gin.Context) {
 	claims, userID, ok := callerFromContext(c)
 	if !ok {
 		return
 	}
 
+	opts, ok := parseTaskListOptions(c)
+	if !ok {
+		return
+	}
+
 	var tasks []models.Task
+	var total int64
 	var err error
 	if claims.IsAdmin {
-		tasks, err = h.taskService.GetTasks(h.db)
+		tasks, total, err = h.taskService.GetTasks(h.db, opts)
 	} else {
-		tasks, err = h.taskService.GetTasksByUser(h.db, userID)
+		tasks, total, err = h.taskService.GetTasksByUser(h.db, userID, opts)
 	}
 	if err != nil {
 		handleTaskError(c, err)
 		return
 	}
+	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
 	c.JSON(http.StatusOK, tasks)
+}
+
+// parseTaskListOptions reads and validates limit, offset, sort_by and order; it replies 400 and returns false if any is invalid.
+func parseTaskListOptions(c *gin.Context) (services.TaskListOptions, bool) {
+	const maxLimit = 100
+	opts := services.TaskListOptions{Limit: maxLimit, SortBy: "created_at", Order: "asc"}
+
+	if v := c.Query("limit"); v != "" {
+		limit, err := strconv.Atoi(v)
+		if err != nil || limit < 1 || limit > maxLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a number between 1 and 100"})
+			return opts, false
+		}
+		opts.Limit = limit
+	}
+
+	if v := c.Query("offset"); v != "" {
+		offset, err := strconv.Atoi(v)
+		if err != nil || offset < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be a number that is 0 or more"})
+			return opts, false
+		}
+		opts.Offset = offset
+	}
+
+	if v := c.Query("sort_by"); v != "" {
+		if _, ok := services.TaskSortFields[v]; !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sort_by must be created_at, due_date, title or status"})
+			return opts, false
+		}
+		opts.SortBy = v
+	}
+
+	if v := strings.ToLower(c.Query("order")); v != "" {
+		if v != "asc" && v != "desc" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "order must be asc or desc"})
+			return opts, false
+		}
+		opts.Order = v
+	}
+
+	return opts, true
 }
 
 func handleTaskError(c *gin.Context, err error) {

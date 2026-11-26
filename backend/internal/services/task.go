@@ -12,9 +12,26 @@ type TaskService interface {
 	UpdateTask(db *gorm.DB, task models.Task) (models.Task, error)
 	DeleteTask(db *gorm.DB, taskID uuid.UUID) error
 	GetTaskByID(db *gorm.DB, taskID uuid.UUID) (models.Task, error)
-	GetTasksByUser(db *gorm.DB, userID uuid.UUID) ([]models.Task, error)
-	GetTasks(db *gorm.DB) ([]models.Task, error)
+	GetTasksByUser(db *gorm.DB, userID uuid.UUID, opts TaskListOptions) ([]models.Task, int64, error)
+	GetTasks(db *gorm.DB, opts TaskListOptions) ([]models.Task, int64, error)
 }
+
+// TaskListOptions holds validated paging and sorting values (SortBy is a key of TaskSortFields).
+type TaskListOptions struct {
+	Limit  int
+	Offset int
+	SortBy string
+	Order  string
+}
+
+// TaskSortFields whitelists the sortable fields; the value is the column that is safe to put in ORDER BY.
+var TaskSortFields = map[string]string{
+	"created_at": "created_at",
+	"due_date":   "due_date",
+	"title":      "title",
+	"status":     "status",
+}
+
 type TaskServiceImpl struct {
 }
 
@@ -61,18 +78,30 @@ func (s *TaskServiceImpl) GetTaskByID(db *gorm.DB, taskID uuid.UUID) (models.Tas
 	return task, nil
 }
 
-func (s *TaskServiceImpl) GetTasksByUser(db *gorm.DB, userID uuid.UUID) ([]models.Task, error) {
-	tasks := []models.Task{}
-	if err := db.Where("user_id = ?", userID).Order("created_at").Find(&tasks).Error; err != nil {
-		return nil, err
-	}
-	return tasks, nil
+func (s *TaskServiceImpl) GetTasksByUser(db *gorm.DB, userID uuid.UUID, opts TaskListOptions) ([]models.Task, int64, error) {
+	return listTasks(db.Where("user_id = ?", userID), opts)
 }
 
-func (s *TaskServiceImpl) GetTasks(db *gorm.DB) ([]models.Task, error) {
-	tasks := []models.Task{}
-	if err := db.Order("created_at").Find(&tasks).Error; err != nil {
-		return nil, err
+func (s *TaskServiceImpl) GetTasks(db *gorm.DB, opts TaskListOptions) ([]models.Task, int64, error) {
+	return listTasks(db, opts)
+}
+
+// listTasks counts the matching tasks and returns one sorted page of them.
+func listTasks(query *gorm.DB, opts TaskListOptions) ([]models.Task, int64, error) {
+	var total int64
+	if err := query.Model(&models.Task{}).Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	return tasks, nil
+
+	tasks := []models.Task{}
+	err := query.
+		Order(TaskSortFields[opts.SortBy] + " " + opts.Order).
+		Order("id").
+		Limit(opts.Limit).
+		Offset(opts.Offset).
+		Find(&tasks).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return tasks, total, nil
 }

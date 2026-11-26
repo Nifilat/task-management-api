@@ -1,3 +1,7 @@
--- TODO(4): Create the roles table.
---   id   UUID PRIMARY KEY
---   name VARCHAR(50) NOT NULL UNIQUE      -- 'user' and 'admin' are inserted in 000008
+CREATE TABLE roles (
+    id UUID NOT NULL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ NULL
+);

@@ -1,5 +1,6 @@
--- TODO(4): Create the permissions table.
---   id       UUID PRIMARY KEY
---   resource VARCHAR(50) NOT NULL         -- e.g. 'task', 'user', 'profile'
---   action   VARCHAR(50) NOT NULL         -- e.g. 'read', 'write', 'delete'
---   UNIQUE (resource, action)
+CREATE TABLE permissions (
+    id UUID NOT NULL PRIMARY KEY,
+    resource VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    UNIQUE (resource, action)
+);

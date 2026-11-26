@@ -1,10 +1,13 @@
--- TODO(7): Create the tasks table (rubric: new migration in this folder, ascending numeric prefix).
---   id          UUID PRIMARY KEY
---   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE   -- the task owner (ABAC checks this)
---   title       VARCHAR(255) NOT NULL
---   description TEXT
---   due_date    TIMESTAMPTZ            -- the frontend sends title, description, due_date, user_id
---   status      VARCHAR(50) NOT NULL DEFAULT 'pending'   -- e.g. pending | in_progress | completed
---   created_at / updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMPTZ NULL
---   (same audit columns as users and tokens, because the GORM models embed gorm.Model)
--- Consider an index on tasks(user_id) since every user-facing list filters by it.
+CREATE TABLE tasks (
+    id UUID NOT NULL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    due_date TIMESTAMPTZ,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX idx_tasks_user_id ON tasks(user_id);

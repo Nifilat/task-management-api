@@ -1,1 +1,1 @@
--- TODO(4): DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS role_permissions;

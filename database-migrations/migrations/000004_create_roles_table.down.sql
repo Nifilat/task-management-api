@@ -1,1 +1,1 @@
--- TODO(4): DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS roles;

@@ -1,1 +1,1 @@
--- TODO(7): DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS tasks;

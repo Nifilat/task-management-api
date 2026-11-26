@@ -1,1 +1,1 @@
--- TODO(4): DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS permissions;

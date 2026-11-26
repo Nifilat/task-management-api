@@ -102,9 +102,3 @@ func ParseJWT(tokenString string) (*Claims, error) {
 	}
 	return claims, nil
 }
-
-// IsValidUUID reports whether s is a well-formed UUID (use before touching the database).
-// TODO(8): Implement with uuid.FromString from github.com/gofrs/uuid.
-func IsValidUUID(s string) bool {
-	return false
-}

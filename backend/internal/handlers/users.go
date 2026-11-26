@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"task-manager/backend/internal/services"
-	"task-manager/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid"
@@ -19,51 +19,77 @@ func NewUserHandler(db *gorm.DB, userService services.UserService) *UserHandler 
 	return &UserHandler{db: db, userService: userService}
 }
 
-// GetUserProfile handles GET /api/v1/users/profile (the caller's own profile).
-// TODO(8): SECURITY: services.GetUserProfileMalicious builds SQL with fmt.Sprintf and is injectable.
-// Use the parameterized GetUserProfile instead, and delete the Malicious method (rubric: SQL injection fix).
-// TODO(8): Take the user id from the token claims, not from the request. Never return the password hash.
+// GetUserProfile handles GET /api/v1/users/profile (the caller's own profile; the id comes from the token).
 func (h *UserHandler) GetUserProfile(c *gin.Context) {
-	value, exists := c.Get("claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-		return
-	}
-
-	userID, err := uuid.FromString(value.(*utils.Claims).UserID)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+	_, userID, ok := callerFromContext(c)
+	if !ok {
 		return
 	}
 
 	user, err := h.userService.GetUserProfile(h.db, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not load profile"})
+		handleUserError(c, err)
 		return
 	}
-	if user.ID == uuid.Nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-
 	c.JSON(http.StatusOK, user)
 }
 
 // GetUserProfileByUserId handles GET /api/v1/users/profile/:user_id.
-// TODO(8): Validate :user_id as a UUID, use the parameterized query, 404 if not found.
-// TODO(8): ABAC: a user may read only their own profile; an admin may read anyone's.
+// The route's RequireOwnerOrAdmin middleware ensures the caller is that user or an admin.
 func (h *UserHandler) GetUserProfileByUserId(c *gin.Context) {
-	c.JSON(http.StatusOK, "user profile by user ID")
+	userID, err := uuid.FromString(c.Param("user_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	user, err := h.userService.GetUserProfile(h.db, userID)
+	if err != nil {
+		handleUserError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, user)
 }
 
-// GetUsers handles GET /api/v1/users (admin only: user:read).
-// TODO(8): Restrict to admins; never include password hashes in the response.
+// GetUsers handles GET /api/v1/users (admin only: the route requires user:read).
 func (h *UserHandler) GetUsers(c *gin.Context) {
-	c.JSON(http.StatusOK, "users list")
+	users, err := h.userService.GetUsers(h.db)
+	if err != nil {
+		handleUserError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, users)
 }
 
-// DeleteUser handles DELETE /api/v1/users/:user_id (admin only: user:delete).
-// TODO(8): Validate the UUID, 404 if missing. Decide whether an admin may delete their own account.
+// DeleteUser handles DELETE /api/v1/users/:user_id (admin only: the route requires user:delete).
+// An admin cannot delete their own account, so the platform is never left without one.
 func (h *UserHandler) DeleteUser(c *gin.Context) {
-	c.JSON(http.StatusNoContent, nil)
+	userID, err := uuid.FromString(c.Param("user_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	_, callerID, ok := callerFromContext(c)
+	if !ok {
+		return
+	}
+	if userID == callerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "you cannot delete your own account"})
+		return
+	}
+
+	if err := h.userService.DeleteUser(h.db, userID); err != nil {
+		handleUserError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func handleUserError(c *gin.Context, err error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process user request"})
+	}
 }

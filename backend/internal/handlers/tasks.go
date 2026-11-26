@@ -71,7 +71,7 @@ func (h *TaskHandler) loadTask(c *gin.Context) (models.Task, bool) {
 func (h *TaskHandler) CreateTask(c *gin.Context) {
 	var input models.TaskInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required; status must be pending, in_progress or completed"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required and must be at most 255 characters; status must be pending, in_progress or completed"})
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 
 	var input models.TaskInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required; status must be pending, in_progress or completed"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title is required and must be at most 255 characters; status must be pending, in_progress or completed"})
 		return
 	}
 

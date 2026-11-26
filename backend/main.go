@@ -48,7 +48,7 @@ func main() {
 	}
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://host.docker.internal"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost", "http://host.docker.internal"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length", "Retry-After", "X-Total-Count"},
